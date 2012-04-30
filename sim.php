@@ -21,18 +21,6 @@
 	$connection = mysql_connect("localhost","root","") or die ("no server connection possible");
 	mysql_select_db("entree_db") or die ("no database connection possible");
 
-	# Add the restaurant to the user's profile
-	
-		//check if already a part of the user profile
-		$checkProfile_query = "SELECT * FROM `likes` WHERE res_id = \"" . $fav_restaurant . "\" AND userid = \"" . $userid . "\";";
-		//echo $checkProfile_query;
-		$checkProfile_result = mysql_query($checkProfile_query);
-		//echo $checkProfile_result;
-		if (mysql_num_rows($checkProfile_result) == 0) {
-			//add to user profile
-			$addToProfile_query = "INSERT INTO `likes`(`res_id`, `userid`) VALUES (" . $fav_restaurant . "," . $userid . ");";
-			$addToProfile_result = mysql_query($addToProfile_query);
-		}
 	# Get all restaurants in the city in which the user would like to eat in
 	$restaurants_query = "SELECT res_id FROM restaurant a JOIN city b WHERE a.cit_id = b.cit_id AND a.cit_id =".$fav_res_city." ORDER BY res_name ASC";
 	$restaurants_result = mysql_query($restaurants_query);
@@ -41,15 +29,13 @@
 	$fav_rest_attrs_query = "SELECT * FROM res_fea WHERE res_id =".$fav_restaurant." ORDER BY fea_id ASC";
 	$fav_rest_attrs_result = mysql_query($fav_rest_attrs_query);
 	
-	
 	# this array only contains the ids of the user's favourite restaurants
 	$fav_rest_ids = array();
+
 	
 	$temp_array_index = -1;
 	$temp_fav_rest_id = -1;
 	
-	
-		
 		while($row = mysql_fetch_object($fav_rest_attrs_result))
 		{		
 			# Has an array entry for the current restaurant already been created?
@@ -83,6 +69,33 @@
 				$fav_rest_attr_vector[$temp_fav_rest_id][] = $row->fea_id;
 			}
 		}
+		
+	# Add the restaurant and features to the user's profile
+	
+	# Get the highest choice id
+	$get_choice_id_query = "SELECT MAX(choice_id) AS choice_id FROM likes";
+	$get_choice_id_result = mysql_query($get_choice_id_query);
+	$choice_temp = mysql_fetch_object($get_choice_id_result);
+	$choice_id = $choice_temp->choice_id;
+	
+	# First add?
+	if($choice_id ==FALSE)
+	{
+	$choice_id =1;
+	}
+	else
+	{
+	$choice_id++;
+	}
+	
+	
+	for($i=0;$i<count($fav_rest_attr_vector[$fav_restaurant]);$i++)
+	{
+			//add to user profile
+			$addToProfile_query = "INSERT INTO `likes`(`res_id`, `userid`,`fea_id`,`choice_id`,`like_code`) VALUES (".$fav_restaurant.",".$userid.",".$fav_rest_attr_vector[$fav_restaurant][$i].",".$choice_id.",1);";
+			$addToProfile_result = mysql_query($addToProfile_query);
+	}
+	
 	
 	#Get the attributes of the restaurants in the city in which the user would like to eat 
 	$rest_attrs_query = "SELECT * FROM res_fea a, restaurant b WHERE a.res_id = b.res_id AND b.cit_id =".$fav_res_city." ORDER BY a.res_id ASC";
@@ -131,6 +144,12 @@
 	
 	$sim_count = 0;
 	
+	# numer of attributes of the favourite restaurant that could not be found
+	$dissim_count_fav_res = 0;
+	
+	# numer of attributes of the compared restaurant that could not be found
+	$dissim_count_res = 0;
+	
 	#rest_id with the highest similarity
 	$sim_max_id = 0;
 	
@@ -149,14 +168,23 @@
 			}
 			$sim_restaurants[] = array($rest, $sim_count);
 			
+			# calculate the dissimilarity
+			$dissim_count_res = count($attrs)-$sim_count;
+			$dissim_count_fav_res = count($fav_rest_attr_vector[$fav_restaurant])-$sim_count;
+			
 			#upadte the max_sim value
 			if($rest != $fav_restaurant && $sim_count>$sim_max)
 			{
 				$sim_max = $sim_count;
+				
+				# jaccard similarity
+				$jaccard_sim = $sim_count / ($sim_count+$dissim_count_res+$dissim_count_fav_res);
+				
 				$sim_max_id = $rest;
 				$sim_max_attrs = $attrs;
 			}
 			$sim_count = 0;
+			$dissim_count = 0;
 		
 	}
 	
@@ -169,12 +197,17 @@
 		$res_max = mysql_fetch_object($res_max_result);
 		
 		echo "<br><br>Restaurant <b>".$res_max->res_name."</b> has the highest similarity with <b>".$sim_max." similar attributes</b>.<br><br>";
+		echo "This corresponds to a Jaccard similarity value of <b>".round($jaccard_sim,4)."</b>.<br><br>";
 		
 		echo "Attributes favourite restaurant:<br><br> ";
 		print_r($fav_rest_attr_vector[$fav_restaurant]);
 		
 		echo "<br><br>Attributes recommended restaurant:<br><br>";
 		print_r($sim_max_attrs);
+		
+		echo "<br><br><a href=\"mod_restaurant.php?res_id=".$sim_max_id."\"> Modify recommendation </a>";
+		
+		
 	}
 	else
 	{
