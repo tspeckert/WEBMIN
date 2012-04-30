@@ -3,6 +3,7 @@
 	# start the session and get the initial login data
 	session_start();
 	$email = $_SESSION['email'];
+	$userid = $_SESSION['userid'];
 ?>
 
 <html>

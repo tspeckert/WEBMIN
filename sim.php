@@ -2,7 +2,7 @@
 	# Start the session
 	session_start();
 	$email = $_SESSION['email'];
-
+	$userid = $_SESSION['userid'];
 ?>
 
 <html>
@@ -21,6 +21,18 @@
 	$connection = mysql_connect("localhost","root","") or die ("no server connection possible");
 	mysql_select_db("entree_db") or die ("no database connection possible");
 
+	# Add the restaurant to the user's profile
+	
+		//check if already a part of the user profile
+		$checkProfile_query = "SELECT * FROM `likes` WHERE res_id = \"" . $fav_restaurant . "\" AND userid = \"" . $userid . "\";";
+		//echo $checkProfile_query;
+		$checkProfile_result = mysql_query($checkProfile_query);
+		//echo $checkProfile_result;
+		if (mysql_num_rows($checkProfile_result) == 0) {
+			//add to user profile
+			$addToProfile_query = "INSERT INTO `likes`(`res_id`, `userid`) VALUES (" . $fav_restaurant . "," . $userid . ");";
+			$addToProfile_result = mysql_query($addToProfile_query);
+		}
 	# Get all restaurants in the city in which the user would like to eat in
 	$restaurants_query = "SELECT res_id FROM restaurant a JOIN city b WHERE a.cit_id = b.cit_id AND a.cit_id =".$fav_res_city." ORDER BY res_name ASC";
 	$restaurants_result = mysql_query($restaurants_query);

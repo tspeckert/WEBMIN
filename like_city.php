@@ -22,6 +22,29 @@ else echo "no email has been set";
 $connection = mysql_connect("localhost","root","") or die ("no server connection possible");
 mysql_select_db("entree_db") or die ("no database connection possible");
 
+//Check if user has an account
+$acountExists_query = "SELECT userid FROM `users` WHERE `email` = \"" . htmlspecialchars($email) . "\";";
+$accountExists_result = mysql_query($acountExists_query);
+
+if (mysql_num_rows($accountExists_result) == 0) {
+	//no account exists, so lets create one;
+	$createAccount_query = "INSERT INTO `users`(`email`) VALUES (\"". htmlspecialchars($email) . "\");";
+	
+	if (!mysql_query($createAccount_query)) {
+		die("can't create account");
+	}
+	
+	//get userid 
+	$userid = mysql_insert_id();
+} else {
+	$userid = mysql_result($accountExists_result, 0);
+}
+
+//add the userid to the session variable array
+if(isset($userid)) {
+	 $_SESSION['userid'] = $userid;
+}
+
 $city_query = "SELECT * FROM city ORDER BY cit_name ASC";
 $city_result = mysql_query($city_query);
 
