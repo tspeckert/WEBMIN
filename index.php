@@ -3,7 +3,7 @@
 <body>
 <div>Hello there.</div>
 <div>
- <form action="like.php" method="get">
+ <form action="like_city.php" method="get">
   <p>To begin, please enter your e-mail address:</p>
   <p><input type="text" name="email" /></p>
   <p><input type="submit" value="Continue" /></p>
