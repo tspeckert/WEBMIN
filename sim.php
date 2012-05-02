@@ -151,10 +151,10 @@
 	$dissim_count_res = 0;
 	
 	#rest_id with the highest similarity
-	$sim_max_id = 0;
+	$sim_jaccard_max_id = 0;
 	
 	#highest similarity value
-	$sim_max=0;
+	$sim_jaccard_max=0;
 	
 	
 	foreach($rest_attr_vector as $rest => $attrs){
@@ -166,46 +166,48 @@
 					$sim_count++;
 				}
 			}
-			$sim_restaurants[] = array($rest, $sim_count);
+			
 			
 			# calculate the dissimilarity
 			$dissim_count_res = count($attrs)-$sim_count;
 			$dissim_count_fav_res = count($fav_rest_attr_vector[$fav_restaurant])-$sim_count;
+			# jaccard similarity
+			$jaccard_sim = $sim_count / ($sim_count+$dissim_count_res+$dissim_count_fav_res);
 			
-			#upadte the max_sim value
-			if($rest != $fav_restaurant && $sim_count>$sim_max)
+			$sim_restaurants[] = array($rest, $sim_count, $jaccard_sim);
+			
+			#upadte the max_jaccard_sim value
+			if($rest != $fav_restaurant && $jaccard_sim>$sim_jaccard_max)
 			{
 				$sim_max = $sim_count;
-				
-				# jaccard similarity
-				$jaccard_sim = $sim_count / ($sim_count+$dissim_count_res+$dissim_count_fav_res);
-				
-				$sim_max_id = $rest;
-				$sim_max_attrs = $attrs;
+				$sim_jaccard_max = $jaccard_sim;
+				$sim_jaccard_max_id = $rest;
+				$sim_jaccard_max_attrs = $attrs;
 			}
 			$sim_count = 0;
-			$dissim_count = 0;
+			$dissim_count_res = 0;
+			$dissim_count_fav_res = 0;
 		
 	}
 	
-	if($sim_max>0)
+	if($sim_jaccard_max>0)
 	{	echo "<br>Great <b>".$email.", </b>we found an alternative to your favourite restaurant.";
 		
 		# Get restaurant name
-		$res_query = "SELECT res_name FROM restaurant WHERE res_id =".$sim_max_id;
+		$res_query = "SELECT res_name FROM restaurant WHERE res_id =".$sim_jaccard_max_id;
 		$res_max_result = mysql_query($res_query);
 		$res_max = mysql_fetch_object($res_max_result);
 		
 		echo "<br><br>Restaurant <b>".$res_max->res_name."</b> has the highest similarity with <b>".$sim_max." similar attributes</b>.<br><br>";
-		echo "This corresponds to a Jaccard similarity value of <b>".round($jaccard_sim,4)."</b>.<br><br>";
+		echo "This corresponds to a Jaccard similarity value of <b>".round($sim_jaccard_max,4)."</b>.<br><br>";
 		
 		echo "Attributes favourite restaurant:<br><br> ";
 		print_r($fav_rest_attr_vector[$fav_restaurant]);
 		
 		echo "<br><br>Attributes recommended restaurant:<br><br>";
-		print_r($sim_max_attrs);
+		print_r($sim_jaccard_max_attrs);
 		
-		echo "<br><br><a href=\"mod_restaurant.php?res_id=".$sim_max_id."\"> Modify recommendation </a>";
+		echo "<br><br><a href=\"mod_restaurant.php?res_id=".$sim_jaccard_max_id."\"> Modify recommendation </a>";
 		
 		
 	}
