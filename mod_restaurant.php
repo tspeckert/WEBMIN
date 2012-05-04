@@ -27,10 +27,10 @@
 	# Attribute array from the recommended restaurant for serialization
 	$rec_rest_attrs = array();
 	
-	echo "Please <b>deselect</b> the attributes of the restaurant that made you reject this recommendation.<br><br>"; 
+	echo "Please <b>select</b> the attributes of the restaurant that made you reject this recommendation.<br><br>"; 
 
 	#Display all attributes for the recommended restaurant; Needed for comparison in the next step
-	echo "<form action=\"sim_mod.php\" method=\"get\">";
+	echo "<form action=\"sim.php\" method=\"get\">";
 	
 	# hidden parameter that holds the restaurant_id
 	echo "<input type=\"hidden\" name =\"restaurant_id\" value =\"".$rec_rest_id."\">";
@@ -41,7 +41,7 @@
 		$rec_rest_attrs[]= $row->fea_id;
 		
 		# set checkbox with attribute value
-		echo "<input type=\"checkbox\" name = \"pref_attribute[]\" value=\"".$row->fea_id."\" checked>".$row->fea_name."<br>";
+		echo "<input type=\"checkbox\" name = \"pref_attribute[]\" value=\"".$row->fea_id."\">".$row->fea_name."<br>";
 		}
 	
 	# serialize attribute array of recommended restaurant
