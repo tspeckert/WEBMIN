@@ -52,8 +52,10 @@
 		foreach($mod_res_attr_ids as $attr_id)
 		{
 			//add to user profile
-			$updateProfile_query = "UPDATE `likes` SET `like_code`= -1 WHERE choice_id = ".$last_choice_id." AND fea_id = ".$attr_id.";";
+			#$updateProfile_query = "UPDATE `likes` SET `like_code`= -100 WHERE choice_id = ".$last_choice_id." AND fea_id = ".$attr_id.";";
+			$updateProfile_query = "UPDATE `likes` SET `like_code`= -100 WHERE `userid` = ".$userid." and `fea_id` = ".$attr_id.";";
 			$updateProfile_result = mysql_query($updateProfile_query);
+			
 		}
 	}
 	else {
@@ -162,7 +164,10 @@
 		
 		if($average > $THRESHOLD)
 			$profile_feature_ids[] = $feature_id;
-	} 
+			
+		$profile_feature_values[$feature_id] = $average;
+	}
+	
 	echo "</br>";
 	
 	#Get the attributes of the restaurants in the city in which the user would like to eat 
@@ -208,92 +213,56 @@
 			}
 		}
 
-	# count the similarity with each restaurant
+	$min_distance = 0;
+	$closest_rest_id = -1;
 	
-	$sim_count = 0;
-	
-	# numer of attributes of the favourite restaurant that could not be found
-	$dissim_count_fav_res = 0;
-	
-	# numer of attributes of the compared restaurant that could not be found
-	$dissim_count_res = 0;
-	
-	#rest_id with the highest similarity
-	$sim_jaccard_max_id = 0;
-	
-	#highest similarity value
-	$sim_jaccard_max=0;
-	
-	
+	# loop through all the restaurants in the city that the user wants a recommandation in
 	foreach($rest_attr_vector as $rest => $attrs){
+		$distance = 0;
+		
+		# loop through all the possible features
+		for($fea_index = 0; $fea_index <= 256; $fea_index++) {
+			$profile_value = array_key_exists($fea_index, $profile_feature_values) ? $profile_feature_values[$fea_index] : 0;
+			$restaurant_value = in_array($fea_index, $attrs) ? 1 : -1;
 			
-			foreach($profile_feature_ids as $profile_feature_id)
-			{	
-				if(in_array($profile_feature_id,$attrs))
-				{	
-					$sim_count++;
-				}
-			}
-			
-			# calculate the dissimilarity
-			$dissim_count_res = count($attrs)-$sim_count;
-			$dissim_count_fav_res = count($profile_feature_ids)-$sim_count;
-			# jaccard similarity
-			$jaccard_sim = $sim_count / ($sim_count+$dissim_count_res+$dissim_count_fav_res);
-			
-			$sim_restaurants[] = array($rest, $sim_count, $jaccard_sim);
-			
-			#upadte the max_jaccard_sim value
-			$rec_rest_array = $_SESSION['rec_rest_array'];
-			
-			if($rest != $fav_restaurant && !in_array($rest, $rec_rest_array) && $jaccard_sim>$sim_jaccard_max)
-			{
-				$sim_max = $sim_count;
-				$sim_jaccard_max = $jaccard_sim;
-				$sim_jaccard_max_id = $rest;
-				$sim_jaccard_max_attrs = $attrs;
-			}
-			$sim_count = 0;
-			$dissim_count_res = 0;
-			$dissim_count_fav_res = 0;
-		
-	}
-	
-	if($sim_jaccard_max>0)
-	{	echo "<br>Great <b>".$email.", </b>we found an alternative to your favourite restaurant.";
-		
-		# Get restaurant name
-		$res_query = "SELECT res_name FROM restaurant WHERE res_id =".$sim_jaccard_max_id;
-		$res_max_result = mysql_query($res_query);
-		$res_max = mysql_fetch_object($res_max_result);
-		
-		# Remember the already recommended restaurants
-		$_SESSION['rec_rest_array'][] = $sim_jaccard_max_id;
-		
-		echo "<br><br>Restaurant <b>".$res_max->res_name."</b> has the highest similarity with <b>".$sim_max." similar attributes</b>.<br><br>";
-		echo "This corresponds to a Jaccard similarity value of <b>".round($sim_jaccard_max,4)."</b>.<br><br>";
-		
-		echo "Attributes favourite restaurant:<br><br> ";
-		print_r($profile_feature_ids);
-		
-		echo "<br><br>Attributes recommended restaurant:<br><br>";
-		print_r($sim_jaccard_max_attrs);
-		
-		echo "<br><br><a href=\"mod_restaurant.php?res_id=".$sim_jaccard_max_id."\"> Modify recommendation </a>";
-		
-		# saves the recommended restaurant in the likes table
-		$choice_id++;
-		
-		foreach($sim_jaccard_max_attrs as $attr_id)
-		{
-			//add to user profile
-			$addToProfile_query = "INSERT INTO `likes`(`res_id`, `userid`,`fea_id`,`choice_id`,`like_code`) VALUES (".$sim_jaccard_max_id.",".$userid.",".$attr_id.",".$choice_id.",1);";
-			$addToProfile_result = mysql_query($addToProfile_query);
+			$distance += pow(($profile_value - $restaurant_value),2);
+		}
+		echo $distance . "<br />";
+		if($closest_rest_id == -1 || $distance < $min_distance) {
+			$closest_rest_id = $rest;
+			$min_distance = $distance;
+			$closest_rest_attrs = $attrs;
 		}
 	}
-	else
+	
+	echo "<br>Great <b>".$email.", </b>we found an alternative to your favourite restaurant.";
+	
+	# Get restaurant name
+	$res_query = "SELECT res_name FROM restaurant WHERE res_id =".$closest_rest_id;
+	$res_max_result = mysql_query($res_query);
+	$res_max = mysql_fetch_object($res_max_result);
+	
+	# Remember the already recommended restaurants
+	$_SESSION['rec_rest_array'][] = $closest_rest_id;
+	
+	echo "<br><br>Restaurant <b>".$res_max->res_name."</b> has the highest similarity with <b>distance of ".$min_distance."</b>.<br><br>";
+	
+	echo "Attributes favourite restaurant:<br><br> ";
+	print_r($profile_feature_ids);
+	
+	echo "<br><br>Attributes recommended restaurant:<br><br>";
+	print_r($closest_rest_attrs);
+	
+	echo "<br><br><a href=\"mod_restaurant.php?res_id=".$closest_rest_id."\"> Modify recommendation </a>";
+	
+	# saves the recommended restaurant in the likes table
+	$choice_id++;
+	
+	foreach($closest_rest_attrs as $attr_id)
 	{
-		echo "Sorry, unfortunately there is no similar restaurant here. :-(";
+		//add to user profile
+		$addToProfile_query = "INSERT INTO `likes`(`res_id`, `userid`,`fea_id`,`choice_id`,`like_code`) VALUES (".$closest_rest_id.",".$userid.",".$attr_id.",".$choice_id.",1);";
+		$addToProfile_result = mysql_query($addToProfile_query);
 	}
 
 ?>
