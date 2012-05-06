@@ -1,4 +1,5 @@
 <?php
+	require_once("lib_mysql.php");
 	
 	# start the session and get the initial login data
 	session_start();

@@ -1,272 +1,225 @@
 <?php
-	# Start the session
+	# loads our library
+	require_once("lib_mysql.php");
+	
+	# function to save the features of a restaurant in the user profile
+	function save_res_to_profile($res_id, $user_id) {
+		# get the new like number
+		$query = "SELECT MAX(lik_no) FROM likes WHERE user_id = ".$user_id;
+		$lik_no = execute_scalar($query) + 1;
+		
+		# get the features id of the favourite user restaurant
+		$query = sprintf(
+			"SELECT fea_id
+			FROM res_fea
+			WHERE res_id = %s",
+			$res_id);
+		$features_id = execute_rows($query);
+		
+		# saves the features of the favorite restaurant in the user profile
+		foreach($features_id as $row) {
+			$query = sprintf(
+				"INSERT INTO likes(res_id, user_id, fea_id, lik_no, lik_value)
+				VALUES (%s, %s, %s, %s, 1)",
+				$res_id,
+				$user_id,
+				$row[0],
+				$lik_no);
+			execute_query($query);
+		}
+	}
+	
+	# start the session
 	session_start();
 	$email = $_SESSION['email'];
-	$userid = $_SESSION['userid'];
+	$user_id = $_SESSION['user_id'];
 	
-	$THRESHOLD = 0.2;
+	if(array_key_exists('rec_res_array', $_SESSION))
+		$rec_res_array = $_SESSION['rec_res_array'];
+	
+	# get the disliked features ids from mod_restaurant.php
+	if(array_key_exists('dislike_fea_ids', $_GET))
+		$dislike_fea_ids = $_GET['dislike_fea_ids'];
+	
+	# get favorite city id from like_restaurant.php
+	if(array_key_exists('fav_city_id', $_GET))
+		$fav_city_id = $_SESSION['fav_city_id'] = $_GET['fav_city_id'];
+	else
+		$fav_city_id = $_SESSION['fav_city_id'];
+	# get favorite restaurant id from like_restaurant.php
+	if(array_key_exists('fav_rest_id', $_GET))
+		$fav_rest_id = $_SESSION['fav_rest_id'] = $_GET['fav_rest_id'];
+	else
+		$fav_rest_id = $_SESSION['fav_rest_id'];
 ?>
 
 <html>
-<head><title>Group 6 Recommendation System</title></head>
-<body>
-
+	<head><title>Group 6 Recommendation System</title></head>
+	<body>
+	Already recommanded restaurants:</br>
 <?php
-	
-	# City in which the user wants to eat in (city_id)
-	$restaurant_id = $_GET['restaurant_id'];
-	
-	# Establish DB connection
-	$connection = mysql_connect("localhost","root","") or die ("no server connection possible");
-	mysql_select_db("entree_db") or die ("no database connection possible");
-	
-	echo "Already recommanded restaurants : ";
-	print_r($_SESSION['rec_rest_array']);
+	$i = 0;
+	if(isset($rec_res_array)) {
+		foreach($rec_res_array as $res_name) 
+			echo sprintf("%s. %s</br>", ++$i, $res_name);
+	}
+	else
+		echo "None.";
 	echo "</br>";
-
-	# Get the highest choice id
-	$get_choice_id_query = "SELECT MAX(choice_id) AS choice_id FROM likes";
-	$get_choice_id_result = mysql_query($get_choice_id_query);
-	$choice_temp = mysql_fetch_object($get_choice_id_result);
-	$choice_id = $choice_temp->choice_id;
-		
-	if($restaurant_id) {
-		# we come from mod_restaurant.php
 	
-		# retrieve the favorite city from the session
-		$fav_res_city = $_SESSION['fav_res_city'];
-		# retrieve the favorite restaurant from the session
-		$fav_restaurant = $_SESSION['fav_restaurant'];
-	
-		$mod_res_attr_ids = $_GET['pref_attribute'];
+	# we come from mod_restaurant.php
+	if(isset($dislike_fea_ids)) {
+		# get the last like number
+		$query = "SELECT MAX(lik_no) FROM likes WHERE user_id = ".$user_id;
+		$lik_no = execute_scalar($query);
 		
-		# get the last choice id
-		$lastChoiceID_query = "SELECT max(choice_id) AS choice_id FROM likes WHERE userid = ".$userid.";";
-		$lastChoiceID_result = mysql_query($lastChoiceID_query);
-		$last_choice_id = mysql_fetch_object($lastChoiceID_result);
-		$last_choice_id = $last_choice_id->choice_id;
-		
-		
-		
-		# updates the data in the likes table (puts -1 for features that the user doesn't like)
-		foreach($mod_res_attr_ids as $attr_id)
-		{
-			//add to user profile
-			#$updateProfile_query = "UPDATE `likes` SET `like_code`= -100 WHERE choice_id = ".$last_choice_id." AND fea_id = ".$attr_id.";";
-			$updateProfile_query = "UPDATE `likes` SET `like_code`= -100 WHERE `userid` = ".$userid." and `fea_id` = ".$attr_id.";";
-			$updateProfile_result = mysql_query($updateProfile_query);
-			
+		# loop through all disliked features and set the value -1 in user profile
+		foreach($dislike_fea_ids as $fea_id) {
+			$query = sprintf(
+				"UPDATE likes 
+				SET lik_value = -1
+				WHERE user_id = %s
+				AND lik_no = %s
+				AND fea_id = %s",
+				$user_id,
+				$lik_no,
+				$fea_id);
+			execute_query($query);
 		}
 	}
+	# we come from like_restaurant.php
 	else {
-		# Favourite restaurant of the user (restaurant_id)
-		$fav_restaurant = $_GET['fav_restaurant'];
-		$_SESSION['fav_restaurant'] = $fav_restaurant;
-
-		# City in which the user wants to eat in (city_id)
-		$fav_res_city = $_GET['fav_res_city'];
-		$_SESSION['fav_res_city'] = $fav_res_city;
-		
-		# Create array for remembering the recommended restaurants
-		$_SESSION['rec_rest_array'] = array();
-	
-		#Get the attributes of the favourite user restaurant
-		$fav_rest_attrs_query = "SELECT * FROM res_fea WHERE res_id =".$fav_restaurant." ORDER BY fea_id ASC";
-		$fav_rest_attrs_result = mysql_query($fav_rest_attrs_query);
-		
-		# this array only contains the ids of the user's favourite restaurants
-		$fav_rest_ids = array();
-
-		$temp_array_index = -1;
-		$temp_fav_rest_id = -1;
-	
-		while($row = mysql_fetch_object($fav_rest_attrs_result))
-		{		
-			# Has an array entry for the current restaurant already been created?
-			if($temp_fav_rest_id != $row->res_id)
-			{	
-				#Increment array index for saving new restaurant in a new Array-entry
-				$temp_array_index++;
-				
-				$fav_rest_ids[] = $row->res_id;
-				
-				# first restaurant?
-				if($temp_fav_rest_id == -1)
-				{	
-					# Create new entry for the restaurant
-					$fav_rest_attr_vector = array($row->res_id => array($row->fea_id));
-					# Remember current restaurant
-					$temp_fav_rest_id = $row->res_id;
-				}
-				# if not the first restaurant, attach to array
-				else
-				{	
-					$temp_fav_rest_id = $row->res_id;
-					$fav_rest_attr_vector[$temp_fav_rest_id] = array($row->fea_id);
-				}
-				# Remember current restaurant
-				$temp_fav_rest_id = $row->res_id;
-			}
-			else
-			{
-				# Add new attribute to existing restaurant in Array
-				$fav_rest_attr_vector[$temp_fav_rest_id][] = $row->fea_id;
-			}
-		}
-		
-		# Add the restaurant and features to the user's profile
-		
-		# First add?
-		if($choice_id ==FALSE)
-		{
-			$choice_id =1;
-		}
-		else
-		{
-			$choice_id++;
-		}
-		
-		for($i=0;$i<count($fav_rest_attr_vector[$fav_restaurant]);$i++)
-		{
-			//add to user profile
-			$addToProfile_query = "INSERT INTO `likes`(`res_id`, `userid`,`fea_id`,`choice_id`,`like_code`) VALUES (".$fav_restaurant.",".$userid.",".$fav_rest_attr_vector[$fav_restaurant][$i].",".$choice_id.",1);";
-			$addToProfile_result = mysql_query($addToProfile_query);	
-		}
+		# saves the favorite user restaurant to his profile
+		save_res_to_profile($fav_rest_id, $user_id);
 	}
 	
-	# Get all restaurants in the city in which the user would like to eat in
-	$restaurants_query = "SELECT res_id FROM restaurant a JOIN city b WHERE a.cit_id = b.cit_id AND a.cit_id =".$fav_res_city." ORDER BY res_name ASC";
-	$restaurants_result = mysql_query($restaurants_query);
-	
-	#Get the attributes of the user profile
-	
-	$allFeaturesFromUser_query = "SELECT DISTINCT (fea_id) FROM `likes` WHERE userid = ".$userid.";";
-	$allFeaturesFromUser_result = mysql_query($allFeaturesFromUser_query);
-	
-	$numberOfChoices_query = "SELECT COUNT( DISTINCT (choice_id) ) as number FROM `likes` WHERE userid = ".$userid.";";
-	$numberOfChoices_result = mysql_query($numberOfChoices_query);
-	$numberOfChoices = mysql_fetch_object($numberOfChoices_result);
-	$numberOfChoices = $numberOfChoices->number;
-	
-	$profile_feature_ids = array();
-	
-	while($row = mysql_fetch_array( $allFeaturesFromUser_result )) {
-		$feature_id = $row['fea_id'];
+	# get the average values of the user profile
+	$query = sprintf(
+		"SELECT l.fea_id, SUM(l.lik_value)/(
+			SELECT max(lik_no)
+			FROM likes
+			WHERE user_id = %s) as average_value, f.fea_name
+		FROM likes l
+		JOIN feature f ON l.fea_id = f.fea_id
+		WHERE l.user_id = %s
+		GROUP BY l.fea_id",
+		$user_id,
+		$user_id);
 		
-		$sumFeature_query = "SELECT SUM( like_code ) as sum FROM `likes` WHERE userid = ".$userid." AND fea_id = ".$feature_id;
-		$sumFeature_result = mysql_query($sumFeature_query);
-		$sumFeature = mysql_fetch_object($sumFeature_result);
-		$sumFeature = $sumFeature->sum;
-		
-		$average = $sumFeature / $numberOfChoices;
-		
-		echo $feature_id." = ".$average." | ";
-		
-		if($average > $THRESHOLD)
-			$profile_feature_ids[] = $feature_id;
-			
-		$profile_feature_values[$feature_id] = $average;
-	}
+		$profile_fea_val = execute_rows($query);
+	?>
+	<div style="float:left; padding-right: 30px">
+	<table border="1">
+		<caption> User profile </caption>
+		<tr>
+		<th>fea_id</th>
+		<th>fea_name</th>
+		<th>average</th>
+		</tr>
+		<?php
+		foreach($profile_fea_val as $row)
+			echo sprintf("<tr>
+				<td>%s</td>
+				<td>%s</td>
+				<td>%s</td>
+				</tr>",
+				$row[0],
+				$row[2],
+				$row[1]);
+		?>
+	</table> 
+	</div>
+	<div style="float:left">
+	<?php
+	$profile_fea_val = execute_indexed_values($query);
 	
-	echo "</br>";
-	
-	#Get the attributes of the restaurants in the city in which the user would like to eat 
-	$rest_attrs_query = "SELECT * FROM res_fea a, restaurant b WHERE a.res_id = b.res_id AND b.cit_id =".$fav_res_city." ORDER BY a.res_id ASC";
-	$rest_attrs_result = mysql_query($rest_attrs_query);
-	
-	# this array only contains the ids of the restaurants in the selected city
-	$rest_ids = array();
-	$temp_array_index = -1;
-	$temp_rest_id = -1;
-	
-	while($row = mysql_fetch_object($rest_attrs_result))
-		{		
-			# Has an array entry for the current restaurant already been created?
-			if($temp_rest_id != $row->res_id)
-			{	
-				#Increment array index for saving new restaurant in a new Array-entry
-				$temp_array_index++;
-				
-				$rest_ids[] = $row->res_id;
-				# Create new entry for the restaurant
-				
-				# first restaurant?
-				if($temp_rest_id == -1)
-				{
-					$rest_attr_vector = array($row->res_id => array($row->fea_id));
-					# Remember current restaurant
-					$temp_rest_id = $row->res_id;
-				}
-				# if not the first restaurant, attach to array
-				else
-				{	
-					$temp_rest_id = $row->res_id;
-					$rest_attr_vector[$temp_rest_id] = array($row->fea_id);
-				}
-				# Remember current restaurant
-				$temp_rest_id = $row->res_id;
-			}
-			else
-			{
-				# Add new attribute to existing restaurant in Array
-				$rest_attr_vector[$temp_rest_id][] = $row->fea_id;
-			}
-		}
-
 	$min_distance = 0;
-	$closest_rest_id = -1;
+	$closest_res_id = -1;
+	
+	# get all restaurants and their features in the city in which the user might like to eat in
+	$query = sprintf(
+		"SELECT r.res_id, rf.fea_id
+		FROM restaurant r
+		JOIN res_fea rf ON r.res_id = rf.res_id
+		WHERE r.cit_id = %s
+		ORDER BY r.res_id, rf.fea_id",
+		$fav_city_id);
+	$resfea_rows = execute_rows($query);
+	
+	# stores the results in a new array
+	foreach($resfea_rows as $row)
+		$res_features[$row["res_id"]][] = $row["fea_id"];
 	
 	# loop through all the restaurants in the city that the user wants a recommandation in
-	foreach($rest_attr_vector as $rest => $attrs){
+	foreach($res_features as $res_id => $res_fea_ids){
 		$distance = 0;
-		
+		# merge profile features with restaurant features		
+		$possible_features = array_unique(array_merge(array_keys($profile_fea_val), $res_fea_ids));
 		# loop through all the possible features
-		for($fea_index = 0; $fea_index <= 256; $fea_index++) {
-			$profile_value = array_key_exists($fea_index, $profile_feature_values) ? $profile_feature_values[$fea_index] : 0;
-			$restaurant_value = in_array($fea_index, $attrs) ? 1 : -1;
-			
-			$distance += pow(($profile_value - $restaurant_value),2);
+		foreach($possible_features as $fea_id) {
+		#for($fea_id = 0; $fea_id < 256; $fea_id++) {
+			# get profile value for this feature, or 0 if doens't exist
+			$profile_value = array_key_exists($fea_id, $profile_fea_val) ? $profile_fea_val[$fea_id] : 0;
+			# get restaurant value for this feature or -1 if it doesn't have it
+			$res_value = in_array($fea_id, $res_fea_ids) ? 1 : -1;
+			# adds the distance
+			$distance += pow(($profile_value - $res_value), 2);
 		}
-		echo $distance . "<br />";
-		if($closest_rest_id == -1 || $distance < $min_distance) {
-			$closest_rest_id = $rest;
+		
+		# save the restaurant if it is the closest
+		if(!array_key_exists($res_id, $rec_res_array) && ($closest_res_id == -1 || $distance < $min_distance)) {
+			$closest_res_id = $res_id;
 			$min_distance = $distance;
-			$closest_rest_attrs = $attrs;
+			$closest_res_fea_ids = $res_fea_ids;
 		}
 	}
 	
-	echo "<br>Great <b>".$email.", </b>we found an alternative to your favourite restaurant.";
+	# saves the recommanded restaurant to the user profile
+	save_res_to_profile($closest_res_id, $user_id);
 	
-	# Get restaurant name
-	$res_query = "SELECT res_name FROM restaurant WHERE res_id =".$closest_rest_id;
-	$res_max_result = mysql_query($res_query);
-	$res_max = mysql_fetch_object($res_max_result);
+	# get restaurant name
+	$query = sprintf(
+		"SELECT res_name
+		FROM restaurant
+		WHERE res_id = %s",
+		$closest_res_id);
+	$res_name = execute_scalar($query);
 	
-	# Remember the already recommended restaurants
-	$_SESSION['rec_rest_array'][] = $closest_rest_id;
+	# remember the recommended restaurants
+	$_SESSION['rec_res_array'][$closest_res_id] = $res_name;
 	
-	echo "<br><br>Restaurant <b>".$res_max->res_name."</b> has the highest similarity with <b>distance of ".$min_distance."</b>.<br><br>";
-	
-	echo "Attributes favourite restaurant:<br><br> ";
-	print_r($profile_feature_ids);
-	
-	echo "<br><br>Attributes recommended restaurant:<br><br>";
-	print_r($closest_rest_attrs);
-	
-	echo "<br><br><a href=\"mod_restaurant.php?res_id=".$closest_rest_id."\"> Modify recommendation </a>";
-	
-	# saves the recommended restaurant in the likes table
-	$choice_id++;
-	
-	foreach($closest_rest_attrs as $attr_id)
-	{
-		//add to user profile
-		$addToProfile_query = "INSERT INTO `likes`(`res_id`, `userid`,`fea_id`,`choice_id`,`like_code`) VALUES (".$closest_rest_id.",".$userid.",".$attr_id.",".$choice_id.",1);";
-		$addToProfile_result = mysql_query($addToProfile_query);
-	}
+	$query = sprintf(
+		"SELECT r.fea_id, f.fea_name
+		FROM res_fea r
+		JOIN feature f ON r.fea_id = f.fea_id
+		WHERE r.res_id = %s",
+		$closest_res_id);
+	$res_features = execute_rows($query);
 
 ?>
-
-
-</body>
+	<br>
+	Great <b><?php echo $email;?></b> we found an alternative to your favourite restaurant.
+	<br><br>
+	Restaurant
+	<b><?php echo $res_name;?></b> has the highest similarity with a <b>distance of <?php echo $min_distance;?></b>.
+	<br><br>
+	<table border="1">
+		<caption>Features recommended restaurant</caption>
+		<tr>
+			<th>fea_id</th>
+			<th>fea_name</th>
+		</tr>
+		<?php
+		foreach($res_features as $row)
+			echo sprintf("<tr>
+				<td>%s</td>
+				<td>%s</td>
+				</tr>",
+				$row[0],
+				$row[1]);
+		?>
+	</table> 
+	<a href="mod_restaurant.php?res_id=<?php echo $closest_res_id?>"> I don't like this restaurant</a>
+	</div>
+	</body>
 </html>
