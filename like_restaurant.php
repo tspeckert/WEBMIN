@@ -6,6 +6,8 @@
 	$email = $_SESSION['email'];
 	# Get city of user's favourite restaurant
 	$fav_city_id = $_GET['fav_city_id'];
+	
+	unset($_SESSION['rec_res_array']);
 ?>
 
 <html>

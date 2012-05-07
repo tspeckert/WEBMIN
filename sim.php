@@ -33,9 +33,11 @@
 	session_start();
 	$email = $_SESSION['email'];
 	$user_id = $_SESSION['user_id'];
-	
+
 	if(array_key_exists('rec_res_array', $_SESSION))
 		$rec_res_array = $_SESSION['rec_res_array'];
+	else
+		$rec_res_array = array();
 	
 	# get the disliked features ids from mod_restaurant.php
 	if(array_key_exists('dislike_fea_ids', $_GET))
@@ -59,7 +61,7 @@
 	Already recommanded restaurants:</br>
 <?php
 	$i = 0;
-	if(isset($rec_res_array)) {
+	if(count($rec_res_array)>0) {
 		foreach($rec_res_array as $res_name) 
 			echo sprintf("%s. %s</br>", ++$i, $res_name);
 	}
@@ -86,6 +88,16 @@
 				$fea_id);
 			execute_query($query);
 		}
+		
+		# delete entries that are not relevant anymore (we don't know if the user likes them, we just know he doesn't like them)
+		$query = sprintf(
+			"DELETE FROM likes 
+			WHERE lik_value = 1
+			AND user_id = %s
+			AND lik_no = %s",
+			$user_id,
+			$lik_no);
+		execute_query($query);
 	}
 	# we come from like_restaurant.php
 	else {
@@ -94,7 +106,7 @@
 	}
 	
 	# get the average values of the user profile
-	$query = sprintf(
+	/*$query = sprintf(
 		"SELECT l.fea_id, SUM(l.lik_value)/(
 			SELECT max(lik_no)
 			FROM likes
@@ -104,9 +116,19 @@
 		WHERE l.user_id = %s
 		GROUP BY l.fea_id",
 		$user_id,
+		$user_id);*/
+	
+	# get the average values of the user profile
+	$query = sprintf(
+		"SELECT l.fea_id, SUM(l.lik_value) as sum, f.fea_name
+		FROM likes l
+		JOIN feature f ON l.fea_id = f.fea_id
+		WHERE l.user_id = %s
+		GROUP BY l.fea_id",
+		$user_id,
 		$user_id);
-		
-		$profile_fea_val = execute_rows($query);
+	
+	$profile_fea_val = execute_rows($query);
 	?>
 	<div style="float:left; padding-right: 30px">
 	<table border="1">
@@ -114,7 +136,7 @@
 		<tr>
 		<th>fea_id</th>
 		<th>fea_name</th>
-		<th>average</th>
+		<th>sum</th>
 		</tr>
 		<?php
 		foreach($profile_fea_val as $row)
@@ -132,6 +154,19 @@
 	<div style="float:left">
 	<?php
 	$profile_fea_val = execute_indexed_values($query);
+	
+	$min = $max = reset($profile_fea_val);
+	
+	foreach($profile_fea_val as $value) {
+		if($value < $min) $min = $value;
+		if($value > $max) $max = $value;
+	}
+	foreach($profile_fea_val as $index => $value) {
+		if($value == 0)
+			$profile_fea_val_bounded[$index] = 0;
+		else
+			$profile_fea_val_bounded[$index] = $value > 0 ? $value/$max : $value/$min;
+	}
 	
 	$min_distance = 0;
 	$closest_res_id = -1;

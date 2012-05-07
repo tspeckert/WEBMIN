@@ -12,7 +12,6 @@
 	<body>
 		Please <b>select</b> the attributes of the restaurant that made you reject this recommendation.<br><br>
 		<form action="sim.php" method="get">
-		<input type="hidden" name ="mod_rest_id" value="<?php echo $rec_rest_id;?>">
 		<?php	
 		# Get id from recommended restaurant
 		$rec_rest_id = $_GET['res_id'];
